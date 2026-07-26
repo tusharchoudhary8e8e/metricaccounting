@@ -79,7 +79,9 @@ export default function App() {
   const [selectedLedgerName, setSelectedLedgerName] = useState<string>("");
   const [selectedStockItemName, setSelectedStockItemName] = useState<string>("");
   const [voucherToEdit, setVoucherToEdit] = useState<Voucher | undefined>(undefined);
-  const [activeOverlayScreen, setActiveOverlayScreen] = useState<"party_creation" | "stock_item_creation" | null>(null);
+  const [activeOverlayScreen, setActiveOverlayScreen] = useState<"party_creation" | "stock_item_creation" | "stock_item_edit" | null>(null);
+  const [showSalesTypeModal, setShowSalesTypeModal] = useState(false);
+  const [salesType, setSalesType] = useState<"GST" | "Exempted">("GST");
 
   // Auth State
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -131,6 +133,29 @@ export default function App() {
       window.removeEventListener("offline", handleOnlineStatus);
     };
   }, [fetchAllData]);
+
+  // Keyboard handler for Sales Type selection modal
+  useEffect(() => {
+    if (!showSalesTypeModal) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowSalesTypeModal(false);
+      } else if (e.key === "1") {
+        e.preventDefault();
+        setSalesType("GST");
+        setShowSalesTypeModal(false);
+        setScreen("voucher_entry");
+      } else if (e.key === "2") {
+        e.preventDefault();
+        setSalesType("Exempted");
+        setShowSalesTypeModal(false);
+        setScreen("voucher_entry");
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [showSalesTypeModal]);
 
   const currentMenuItems = useMemo(() => {
     switch (screen) {
@@ -212,7 +237,7 @@ export default function App() {
               setScreen("voucher_entry");
             } else if (num === 8) {
               setVoucherType("Sales");
-              setScreen("voucher_entry");
+              setShowSalesTypeModal(true);
             } else if (num === 9) {
               setVoucherType("Purchase");
               setScreen("voucher_entry");
@@ -256,7 +281,11 @@ export default function App() {
       else if (sel === "Back") setScreen("gateway");
       else {
         let vt: VoucherType = "Sales";
-        if (sel.startsWith("Sales")) vt = "Sales";
+        if (sel.startsWith("Sales")) {
+          setVoucherType("Sales");
+          setShowSalesTypeModal(true);
+          return;
+        }
         else if (sel.startsWith("Payment")) vt = "Payment";
         else if (sel.startsWith("Receipt")) vt = "Receipt";
         else if (sel.startsWith("Purchase")) vt = "Purchase";
@@ -488,6 +517,7 @@ export default function App() {
             onSave={handleSaveVoucher}
             voucherToEdit={voucherToEdit}
             disableKeyboard={activeOverlayScreen !== null}
+            salesType={salesType}
           />
         ) : screen === "party_creation" ? (
           <PartyCreationScreen
@@ -543,6 +573,10 @@ export default function App() {
             onAlterVoucher={(vch) => {
               setVoucherToEdit(vch);
               setVoucherType(vch.type);
+              if (vch.type === "Sales") {
+                const isExempt = (vch.cgst || 0) === 0 && (vch.sgst || 0) === 0 && (vch.igst || 0) === 0;
+                setSalesType(isExempt ? "Exempted" : "GST");
+              }
               setScreen("voucher_entry");
             }}
           />
@@ -554,6 +588,10 @@ export default function App() {
             onAlterVoucher={(vch) => {
               setVoucherToEdit(vch);
               setVoucherType(vch.type);
+              if (vch.type === "Sales") {
+                const isExempt = (vch.cgst || 0) === 0 && (vch.sgst || 0) === 0 && (vch.igst || 0) === 0;
+                setSalesType(isExempt ? "Exempted" : "GST");
+              }
               setScreen("voucher_entry");
             }}
           />
@@ -596,6 +634,42 @@ export default function App() {
               onEsc={() => setActiveOverlayScreen(null)}
               initialStockItemToEdit={stockItems.find(s => s.name === selectedStockItemName)}
             />
+          </div>
+        )}
+
+        {showSalesTypeModal && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ background: "#ffffff", border: "2px solid #0066cc", padding: 20, width: 320, boxShadow: "0 4px 20px rgba(0,0,0,0.3)", fontFamily: MONO }}>
+              <div style={{ background: "#9bc5e2", padding: "4px 8px", fontSize: 12, fontWeight: 700, marginBottom: 12, color: "#000" }}>Select Sales Voucher Class</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <button 
+                  onClick={() => {
+                    setSalesType("GST");
+                    setShowSalesTypeModal(false);
+                    setScreen("voucher_entry");
+                  }} 
+                  style={{ background: "#0066cc", color: "#ffffff", padding: "8px", border: "none", cursor: "pointer", fontFamily: MONO, fontSize: 12, fontWeight: 700 }}
+                >
+                  1. Sales - Taxable (GST)
+                </button>
+                <button 
+                  onClick={() => {
+                    setSalesType("Exempted");
+                    setShowSalesTypeModal(false);
+                    setScreen("voucher_entry");
+                  }} 
+                  style={{ background: "#0066cc", color: "#ffffff", padding: "8px", border: "none", cursor: "pointer", fontFamily: MONO, fontSize: 12, fontWeight: 700 }}
+                >
+                  2. Sales - Exempted (No GST)
+                </button>
+                <button 
+                  onClick={() => setShowSalesTypeModal(false)} 
+                  style={{ background: "#e0e0e0", color: "#333333", padding: "6px", border: "1px solid #b0b0b0", cursor: "pointer", fontFamily: MONO, fontSize: 12 }}
+                >
+                  Cancel (Esc)
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

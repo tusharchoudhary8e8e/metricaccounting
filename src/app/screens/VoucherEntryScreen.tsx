@@ -20,6 +20,7 @@ export function VoucherEntryScreen({
   onSave,
   voucherToEdit,
   disableKeyboard,
+  salesType = "GST",
 }: {
   type: VoucherType;
   parties: Party[];
@@ -31,6 +32,7 @@ export function VoucherEntryScreen({
   onSave?: (vch: Voucher) => void;
   voucherToEdit?: Voucher;
   disableKeyboard?: boolean;
+  salesType?: "GST" | "Exempted";
 }) {
   const isInventory = type === "Sales" || type === "Purchase";
   const isSales = type === "Sales";
@@ -66,9 +68,30 @@ export function VoucherEntryScreen({
   const [invNarration, setInvNarration] = useState(voucherToEdit ? (voucherToEdit.narration || "") : "");
   const [sendToSaleToUpdate, setSendToSaleToUpdate] = useState<boolean>(voucherToEdit ? !!voucherToEdit.isPendingUpdate : false);
 
-  const invFocusFields = isSales
-    ? ["date", "vno", "partyName", "itemName", "qty", "rate", "advance", "orderDate", "deliveryDate", "narration"]
-    : ["date", "vno", "partyName", "itemName", "qty", "rate", "narration"];
+  const [cgstVal, setCgstVal] = useState<string>(voucherToEdit ? String(voucherToEdit.cgst || 0) : "0");
+  const [sgstVal, setSgstVal] = useState<string>(voucherToEdit ? String(voucherToEdit.sgst || 0) : "0");
+  const [igstVal, setIgstVal] = useState<string>(voucherToEdit ? String(voucherToEdit.igst || 0) : "0");
+
+  const invFocusFields = useMemo(() => {
+    const fields = ["date", "vno", "partyName", "itemName", "qty", "rate"];
+    
+    // Add tax fields if it's not exempted
+    if (salesType === "GST" || type === "Purchase") {
+      const partyObj = parties.find(p => p.name.trim().toLowerCase() === invPartyName.trim().toLowerCase());
+      const isInterState = partyObj && partyObj.state && partyObj.state.toLowerCase() !== "maharashtra";
+      if (isInterState) {
+        fields.push("igst");
+      } else {
+        fields.push("cgst", "sgst");
+      }
+    }
+    
+    if (isSales) {
+      fields.push("advance", "orderDate", "deliveryDate");
+    }
+    fields.push("narration");
+    return fields;
+  }, [type, isSales, salesType, invPartyName, parties]);
 
   // States for Non-Inventory Vouchers (Payment, Receipt, etc.)
   const fieldDefs: VoucherField[] = [
@@ -121,6 +144,33 @@ export function VoucherEntryScreen({
     return "";
   }, [isInventory, fieldIdx, invPartyName, curItemName, ledgerFields]);
 
+  // Auto-calculate default taxes on item/party change
+  useEffect(() => {
+    if (isInventory) {
+      if (salesType === "Exempted") {
+        setCgstVal("0");
+        setSgstVal("0");
+        setIgstVal("0");
+        return;
+      }
+
+      const taxableValue = itemsList.reduce((sum, it) => sum + it.amount, 0);
+      const partyObj = parties.find(p => p.name.trim().toLowerCase() === invPartyName.trim().toLowerCase());
+      const isInterState = partyObj && partyObj.state && partyObj.state.toLowerCase() !== "maharashtra";
+
+      const avgGstRate = 18;
+      if (isInterState) {
+        setIgstVal(String(taxableValue * (avgGstRate / 100)));
+        setCgstVal("0");
+        setSgstVal("0");
+      } else {
+        setCgstVal(String(taxableValue * (avgGstRate / 2 / 100)));
+        setSgstVal(String(taxableValue * (avgGstRate / 2 / 100)));
+        setIgstVal("0");
+      }
+    }
+  }, [itemsList, invPartyName, salesType, isInventory, parties]);
+
   const filteredList = useMemo(() => {
     if (!isListOpen) return [];
     const matched = activeList.filter((name) =>
@@ -167,18 +217,16 @@ export function VoucherEntryScreen({
         const partyObj = parties.find(p => p.name.trim().toLowerCase() === invPartyName.trim().toLowerCase());
         const isInterState = partyObj && partyObj.state && partyObj.state.toLowerCase() !== "maharashtra";
 
-        // Average GST rate of items or default 18%
-        const avgGstRate = 18;
         let cgst = 0;
         let sgst = 0;
         let igst = 0;
 
-        if (isInterState) {
-          igst = taxableValue * (avgGstRate / 100);
-        } else {
-          cgst = taxableValue * (avgGstRate / 2 / 100);
-          sgst = taxableValue * (avgGstRate / 2 / 100);
+        if (salesType !== "Exempted") {
+          cgst = parseFloat(cgstVal) || 0;
+          sgst = parseFloat(sgstVal) || 0;
+          igst = parseFloat(igstVal) || 0;
         }
+
         const totalWithTax = taxableValue + cgst + sgst + igst;
 
         // Double-entry validation entries (1.5)
@@ -223,9 +271,9 @@ export function VoucherEntryScreen({
           items: currentItems.map(it => ({
             ...it,
             taxableValue: it.amount,
-            cgst: isInterState ? 0 : it.amount * 0.09,
-            sgst: isInterState ? 0 : it.amount * 0.09,
-            igst: isInterState ? it.amount * 0.18 : 0
+            cgst: salesType === "Exempted" ? 0 : (isInterState ? 0 : it.amount * 0.09),
+            sgst: salesType === "Exempted" ? 0 : (isInterState ? 0 : it.amount * 0.09),
+            igst: salesType === "Exempted" ? 0 : (isInterState ? it.amount * 0.18 : 0)
           })),
           ...(type === "Sales" ? {
             advance: parseFloat(advance) || 0,
@@ -338,7 +386,7 @@ export function VoucherEntryScreen({
             } else if (fieldIdx === 3) {
               if (selectedValue === "None") {
                 setCurItemName("");
-                const nextIdx = invFocusFields.indexOf(isSales ? "advance" : "narration");
+                const nextIdx = Math.min(6, invFocusFields.length - 1);
                 setFieldIdx(nextIdx);
               } else {
                 setCurItemName(selectedValue);
@@ -366,7 +414,7 @@ export function VoucherEntryScreen({
           if (fieldName === "itemName") {
             if (!curItemName.trim() || curItemName.trim().toLowerCase() === "none") {
               setCurItemName("");
-              const nextIdx = invFocusFields.indexOf(isSales ? "advance" : "narration");
+              const nextIdx = Math.min(6, invFocusFields.length - 1);
               setFieldIdx(nextIdx);
             } else {
               // AUTO-POPULATE RATE FROM STOCK ITEM:
@@ -458,7 +506,11 @@ export function VoucherEntryScreen({
     onEsc,
     onShortcutCreateParty,
     onShortcutCreateStockItem,
-    disableKeyboard
+    disableKeyboard,
+    salesType,
+    cgstVal,
+    sgstVal,
+    igstVal
   ]);
 
   const rawSubtotal = itemsList.reduce((sum, it) => sum + it.amount, 0);
@@ -597,12 +649,62 @@ export function VoucherEntryScreen({
               {/* Tax & Total Summary */}
               <div style={{ background: "#f4f8fb", border: "1px solid #d0d0d0", padding: "8px 12px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ fontSize: 11, color: "#555" }}>
-                  Taxable Value: <strong>₹ {fmt(rawSubtotal)}</strong> | Estimated GST (18%): <strong>₹ {fmt(gstAmount)}</strong>
+                  Taxable Value: <strong>₹ {fmt(rawSubtotal)}</strong>
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#0066cc" }}>
                   Total Invoice Amount: ₹ {fmt(finalAmountWithTax)}
                 </div>
               </div>
+
+              {/* Tax Ledgers Section */}
+              {(salesType === "GST" || type === "Purchase") && (
+                <div style={{ background: "#f4f8fb", border: "1px solid #d0d0d0", padding: "8px 12px", marginBottom: 8, display: "flex", gap: 16, alignItems: "center" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#555" }}>Tax Ledgers:</div>
+                  {invFocusFields.includes("igst") ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 11, color: "#555" }}>IGST:</span>
+                      <input
+                        ref={fieldIdx === invFocusFields.indexOf("igst") ? inputRef : null}
+                        type="text"
+                        value={igstVal}
+                        onChange={(e) => setIgstVal(e.target.value)}
+                        onFocus={() => setFieldIdx(invFocusFields.indexOf("igst"))}
+                        style={{ width: 100, background: fieldIdx === invFocusFields.indexOf("igst") ? "#fff8c5" : "#ffffff", border: "1px solid #b0b0b0", padding: "2px 6px", fontFamily: MONO, fontSize: 12 }}
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: "#555" }}>CGST:</span>
+                        <input
+                          ref={fieldIdx === invFocusFields.indexOf("cgst") ? inputRef : null}
+                          type="text"
+                          value={cgstVal}
+                          onChange={(e) => setCgstVal(e.target.value)}
+                          onFocus={() => setFieldIdx(invFocusFields.indexOf("cgst"))}
+                          style={{ width: 100, background: fieldIdx === invFocusFields.indexOf("cgst") ? "#fff8c5" : "#ffffff", border: "1px solid #b0b0b0", padding: "2px 6px", fontFamily: MONO, fontSize: 12 }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: "#555" }}>SGST:</span>
+                        <input
+                          ref={fieldIdx === invFocusFields.indexOf("sgst") ? inputRef : null}
+                          type="text"
+                          value={sgstVal}
+                          onChange={(e) => setSgstVal(e.target.value)}
+                          onFocus={() => setFieldIdx(invFocusFields.indexOf("sgst"))}
+                          style={{ width: 100, background: fieldIdx === invFocusFields.indexOf("sgst") ? "#fff8c5" : "#ffffff", border: "1px solid #b0b0b0", padding: "2px 6px", fontFamily: MONO, fontSize: 12 }}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {salesType === "Exempted" && (
+                <div style={{ background: "#eef7ee", border: "1px solid #cce3cc", padding: "6px 12px", marginBottom: 8, fontSize: 12, color: "#2b542c", fontWeight: 700 }}>
+                  ✓ Exempted Sale (No GST Applied)
+                </div>
+              )}
 
               {isSales && (
                 <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
