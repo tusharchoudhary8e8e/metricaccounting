@@ -123,6 +123,36 @@ export function calculateLedgerTransactions(
   let runningBalance = isNormalDr ? openingBal : -openingBal;
 
   for (const m of sortedDayBook) {
+    // If the voucher has precise double-entry lines, parse them directly!
+    if (m.entries && m.entries.length > 0) {
+      const match = m.entries.find((e) => e.ledgerName.trim().toLowerCase() === normName);
+      if (match) {
+        const amt = match.amount || 0;
+        const isDr = match.dr;
+        if (isDr) {
+          runningBalance += isNormalDr ? amt : -amt;
+        } else {
+          runningBalance += isNormalDr ? -amt : amt;
+        }
+
+        // Find the opposing entry ledger name for particulars display
+        const opposing = m.entries.find((e) => e.dr !== isDr);
+        const particularsText = opposing ? opposing.ledgerName : (m.particulars || "Account");
+
+        txs.push({
+          date: m.date,
+          vno: m.vno,
+          type: m.type,
+          particulars: isDr ? `To ${particularsText}` : `By ${particularsText}`,
+          debit: isDr ? amt : 0,
+          credit: !isDr ? amt : 0,
+          balance: runningBalance,
+          raw: m,
+        });
+      }
+      continue;
+    }
+
     const part = (m.particulars || "").trim().toLowerCase();
     const acc = (m.account || "").trim().toLowerCase();
     const isParticulars = part === normName || part.includes(normName);

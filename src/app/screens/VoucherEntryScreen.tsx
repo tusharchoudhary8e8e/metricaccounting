@@ -72,6 +72,8 @@ export function VoucherEntryScreen({
   const [sgstVal, setSgstVal] = useState<string>(voucherToEdit ? String(voucherToEdit.sgst || 0) : "0");
   const [igstVal, setIgstVal] = useState<string>(voucherToEdit ? String(voucherToEdit.igst || 0) : "0");
 
+  const isInitialMount = useRef(true);
+
   const invFocusFields = useMemo(() => {
     const fields = ["date", "vno", "partyName", "itemName", "qty", "rate"];
     
@@ -147,6 +149,12 @@ export function VoucherEntryScreen({
   // Auto-calculate default taxes on item/party change
   useEffect(() => {
     if (isInventory) {
+      if (isInitialMount.current && voucherToEdit) {
+        isInitialMount.current = false;
+        return;
+      }
+      isInitialMount.current = false;
+
       if (salesType === "Exempted") {
         setCgstVal("0");
         setSgstVal("0");
@@ -514,7 +522,10 @@ export function VoucherEntryScreen({
   ]);
 
   const rawSubtotal = itemsList.reduce((sum, it) => sum + it.amount, 0);
-  const gstAmount = isInventory ? rawSubtotal * 0.18 : 0;
+  const cgstAmt = parseFloat(cgstVal) || 0;
+  const sgstAmt = parseFloat(sgstVal) || 0;
+  const igstAmt = parseFloat(igstVal) || 0;
+  const gstAmount = salesType === "Exempted" ? 0 : (cgstAmt + sgstAmt + igstAmt);
   const finalAmountWithTax = isInventory ? rawSubtotal + gstAmount : (parseFloat(ledgerFields[4] || ledgerFields[5]) || 0);
 
   return (
