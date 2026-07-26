@@ -141,7 +141,23 @@ export function VoucherEntryScreen({
     setErrorMsg(null);
     try {
       if (isInventory) {
-        const taxableValue = itemsList.reduce((sum, it) => sum + it.amount, 0);
+        // Auto-add current item if user filled it but forgot to press Enter on rate field
+        let currentItems = [...itemsList];
+        if (curItemName.trim() && curItemName.trim().toLowerCase() !== "none") {
+          const q = parseFloat(curQty) || 1;
+          const r = parseFloat(curRate) || 0;
+          currentItems.push({ name: curItemName.trim(), qty: q, rate: r, amount: q * r, gstRate: 18 });
+          setItemsList(currentItems);
+          setCurItemName("");
+          setCurQty("1");
+          setCurRate("0");
+        }
+
+        if (currentItems.length === 0) {
+          throw new Error("Please add at least one stock item to the voucher before saving.");
+        }
+
+        const taxableValue = currentItems.reduce((sum, it) => sum + it.amount, 0);
 
         // Find Party details for state check
         const partyObj = parties.find(p => p.name.trim().toLowerCase() === invPartyName.trim().toLowerCase());
@@ -188,9 +204,9 @@ export function VoucherEntryScreen({
           type: type,
           particulars: invPartyName,
           account: type === "Sales" ? "Sales Account" : "Purchase Account",
-          item: itemsList[0]?.name || "",
-          qty: itemsList[0]?.qty || 0,
-          rate: itemsList[0]?.rate || 0,
+          item: currentItems[0]?.name || "",
+          qty: currentItems[0]?.qty || 0,
+          rate: currentItems[0]?.rate || 0,
           amount: totalWithTax,
           taxableValue,
           cgst,
@@ -200,7 +216,7 @@ export function VoucherEntryScreen({
           entries,
           dr: type === "Purchase",
           narration: invNarration,
-          items: itemsList.map(it => ({
+          items: currentItems.map(it => ({
             ...it,
             taxableValue: it.amount,
             cgst: isInterState ? 0 : it.amount * 0.09,
@@ -347,9 +363,7 @@ export function VoucherEntryScreen({
               setFieldIdx(3);
             }
           } else if (fieldIdx === invFocusFields.length - 1) {
-            if (itemsList.length > 0) {
-              setShowAccept(true);
-            }
+            setShowAccept(true);
           } else {
             setFieldIdx(i => Math.min(i + 1, invFocusFields.length - 1));
           }
