@@ -27,7 +27,7 @@ export function VoucherEntryScreen({
   stockItems: StockItem[];
   onEsc: () => void;
   onShortcutCreateParty?: () => void;
-  onShortcutCreateStockItem?: () => void;
+  onShortcutCreateStockItem?: (itemName?: string) => void;
   onSave?: (vch: Voucher) => void;
   voucherToEdit?: Voucher;
   disableKeyboard?: boolean;
@@ -317,7 +317,7 @@ export function VoucherEntryScreen({
       if (e.ctrlKey && (e.key === "e" || e.key === "E")) {
         if (isInventory) {
           e.preventDefault();
-          onShortcutCreateStockItem?.();
+          onShortcutCreateStockItem?.(curItemName);
         }
       }
 
@@ -342,6 +342,13 @@ export function VoucherEntryScreen({
                 setFieldIdx(nextIdx);
               } else {
                 setCurItemName(selectedValue);
+                // AUTO-POPULATE RATE FROM STOCK ITEM:
+                const matchedItem = stockItems.find(s => s.name.trim().toLowerCase() === selectedValue.trim().toLowerCase());
+                if (matchedItem && matchedItem.openingRate) {
+                  setCurRate(String(matchedItem.openingRate));
+                } else {
+                  setCurRate("0");
+                }
                 setFieldIdx(4);
               }
             }
@@ -362,6 +369,13 @@ export function VoucherEntryScreen({
               const nextIdx = invFocusFields.indexOf(isSales ? "advance" : "narration");
               setFieldIdx(nextIdx);
             } else {
+              // AUTO-POPULATE RATE FROM STOCK ITEM:
+              const matchedItem = stockItems.find(s => s.name.trim().toLowerCase() === curItemName.trim().toLowerCase());
+              if (matchedItem && matchedItem.openingRate) {
+                setCurRate(String(matchedItem.openingRate));
+              } else {
+                setCurRate("0");
+              }
               setFieldIdx(4);
             }
           } else if (fieldName === "rate") {
@@ -403,6 +417,15 @@ export function VoucherEntryScreen({
         if (isListOpen && filteredList.length > 0 && listSelIdx > 0) {
           e.preventDefault();
           setListSelIdx((idx) => Math.max(idx - 1, 0));
+        } else if (fieldIdx === 3 && itemsList.length > 0 && !curItemName.trim()) {
+          e.preventDefault();
+          // Pop last item from table back into active inputs for editing
+          const last = itemsList[itemsList.length - 1];
+          setItemsList(prev => prev.slice(0, -1));
+          setCurItemName(last.name);
+          setCurQty(String(last.qty));
+          setCurRate(String(last.rate));
+          setFieldIdx(3);
         } else {
           e.preventDefault();
           setFieldIdx((i) => Math.max(i - 1, 0));
@@ -512,8 +535,19 @@ export function VoucherEntryScreen({
                   </thead>
                   <tbody>
                     {itemsList.map((it, idx) => (
-                      <tr key={idx} style={{ borderBottom: "1px solid #e0e0e0" }}>
-                        <td style={{ padding: "4px 8px", fontWeight: 700 }}>{it.name}</td>
+                      <tr 
+                        key={idx} 
+                        style={{ borderBottom: "1px solid #e0e0e0", cursor: "pointer" }}
+                        title="Click to edit item details"
+                        onClick={() => {
+                          setCurItemName(it.name);
+                          setCurQty(String(it.qty));
+                          setCurRate(String(it.rate));
+                          setItemsList(prev => prev.filter((_, i) => i !== idx));
+                          setFieldIdx(3);
+                        }}
+                      >
+                        <td style={{ padding: "4px 8px", fontWeight: 700, color: "#0066cc" }}>{it.name} ✎</td>
                         <td style={{ padding: "4px 8px", textAlign: "right" }}>{it.qty}</td>
                         <td style={{ padding: "4px 8px", textAlign: "right" }}>{fmt(it.rate)}</td>
                         <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 700 }}>{fmt(it.amount)}</td>
@@ -677,7 +711,15 @@ export function VoucherEntryScreen({
                 if (item === "<Create New Party>") onShortcutCreateParty?.();
                 else if (isInventory) {
                   if (fieldIdx === 2) setInvPartyName(item);
-                  if (fieldIdx === 3) setCurItemName(item);
+                  if (fieldIdx === 3) {
+                    setCurItemName(item);
+                    const matchedItem = stockItems.find(s => s.name.trim().toLowerCase() === item.trim().toLowerCase());
+                    if (matchedItem && matchedItem.openingRate) {
+                      setCurRate(String(matchedItem.openingRate));
+                    } else {
+                      setCurRate("0");
+                    }
+                  }
                 } else {
                   const next = [...ledgerFields];
                   next[fieldIdx] = item;

@@ -8,11 +8,13 @@ export function StockItemEditScreen({
   onSave,
   onDelete,
   onEsc,
+  initialStockItemToEdit,
 }: {
   stockItems: StockItem[];
   onSave: (item: StockItem) => void;
   onDelete: (id: number) => void;
   onEsc: () => void;
+  initialStockItemToEdit?: StockItem;
 }) {
   const [selIdx, setSelIdx] = useState(0);
   const [editingItem, setEditingItem] = useState<StockItem | null>(null);
@@ -34,6 +36,12 @@ export function StockItemEditScreen({
     setOpeningRate(String(item.openingRate || 0));
     setValuationMethod(item.valuationMethod || "FIFO");
   };
+
+  useEffect(() => {
+    if (initialStockItemToEdit) {
+      startEdit(initialStockItemToEdit);
+    }
+  }, [initialStockItemToEdit]);
 
   useEffect(() => {
     if (editingItem) return;

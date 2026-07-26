@@ -330,6 +330,13 @@ export default function App() {
     setActiveOverlayScreen(null);
   };
 
+  const handleDeleteStockItemFromVoucher = async (id: number) => {
+    await DB.deleteStockItem(id);
+    await syncEngine.enqueue("stock_item", "delete", id, { id });
+    await fetchAllData();
+    setActiveOverlayScreen(null);
+  };
+
   const handleSaveStockItem = async (item: StockItem) => {
     let saved: StockItem;
     let operation: "create" | "update" = "create";
@@ -469,7 +476,15 @@ export default function App() {
             stockItems={stockItems}
             onEsc={() => setScreen("vouchers")}
             onShortcutCreateParty={() => setActiveOverlayScreen("party_creation")}
-            onShortcutCreateStockItem={() => setActiveOverlayScreen("stock_item_creation")}
+            onShortcutCreateStockItem={(itemName) => {
+              const matched = stockItems.find(s => s.name.trim().toLowerCase() === itemName?.trim().toLowerCase());
+              if (matched) {
+                setSelectedStockItemName(matched.name);
+                setActiveOverlayScreen("stock_item_edit");
+              } else {
+                setActiveOverlayScreen("stock_item_creation");
+              }
+            }}
             onSave={handleSaveVoucher}
             voucherToEdit={voucherToEdit}
             disableKeyboard={activeOverlayScreen !== null}
@@ -569,6 +584,17 @@ export default function App() {
             <StockItemCreationScreen
               onSave={handleSaveStockItemFromVoucher}
               onEsc={() => setActiveOverlayScreen(null)}
+            />
+          </div>
+        )}
+        {activeOverlayScreen === "stock_item_edit" && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#6b7c8c", display: "flex", flexDirection: "column" }}>
+            <StockItemEditScreen
+              stockItems={stockItems}
+              onSave={handleSaveStockItemFromVoucher}
+              onDelete={handleDeleteStockItemFromVoucher}
+              onEsc={() => setActiveOverlayScreen(null)}
+              initialStockItemToEdit={stockItems.find(s => s.name === selectedStockItemName)}
             />
           </div>
         )}
