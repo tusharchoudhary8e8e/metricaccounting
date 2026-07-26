@@ -1,0 +1,175 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Tenant {
+  id         Int         @id @default(autoincrement())
+  name       String      @default("Default Tenant")
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  users      User[]
+  companies  Company[]
+  ledgers    Ledger[]
+  parties    Party[]
+  stockItems StockItem[]
+  vouchers   Voucher[]
+  auditLogs  AuditLog[]
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  name         String
+  tenantId     Int
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Company {
+  id            Int      @id @default(autoincrement())
+  name          String
+  financialYear String
+  booksFrom     String
+  state         String?
+  gstin         String?
+  tenantId      Int
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Ledger {
+  id        Int       @id @default(autoincrement())
+  name      String
+  group     String
+  opening   Float     @default(0)
+  isSystem  Boolean   @default(false)
+  tenantId  Int
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  vouchers  Voucher[]
+
+  @@unique([tenantId, name])
+}
+
+model Party {
+  id        Int       @id @default(autoincrement())
+  name      String
+  group     String
+  address   String    @default("")
+  phone     String    @default("")
+  gstin     String    @default("")
+  state     String?
+  opening   String    @default("0")
+  tenantId  Int
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  vouchers  Voucher[]
+
+  @@unique([tenantId, name])
+}
+
+model StockItem {
+  id               Int      @id @default(autoincrement())
+  name             String
+  alias            String?
+  group            String
+  unit             String
+  openingQty       Float    @default(0)
+  openingRate      Float    @default(0)
+  openingValue     Float    @default(0)
+  valuationMethod  String?  @default("FIFO")
+  gstApplicability String?
+  hsnDetails       String?
+  hsnCode          String?
+  description      String?
+  gstRateDetails   String?
+  gstRate          Float?   @default(0)
+  typeOfSupply     String?  @default("Goods")
+  rateOfDuty       Float?   @default(0)
+  tenantId         Int
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId, name])
+}
+
+model Voucher {
+  id           Int            @id @default(autoincrement())
+  vno          String
+  date         String
+  type         String
+  particulars  String
+  account      String?
+  partyId      Int?
+  party        Party?         @relation(fields: [partyId], references: [id])
+  ledgerId     Int?
+  ledger       Ledger?        @relation(fields: [ledgerId], references: [id])
+  item         String?
+  qty          Float?
+  rate         Float?
+  advance      Float?
+  orderDate    String?
+  deliveryDate String?
+  amount       Float
+  dr           Boolean        @default(true)
+  narration    String?
+  taxableValue Float?         @default(0)
+  cgst         Float?         @default(0)
+  sgst         Float?         @default(0)
+  igst         Float?         @default(0)
+  totalWithTax Float?         @default(0)
+  tenantId     Int
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  items        VoucherItem[]
+  entries      VoucherEntry[]
+
+  @@unique([tenantId, vno])
+}
+
+model VoucherItem {
+  id           Int     @id @default(autoincrement())
+  voucherId    Int
+  voucher      Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  name         String
+  qty          Float
+  rate         Float
+  amount       Float
+  gstRate      Float?  @default(0)
+  hsnCode      String?
+  taxableValue Float?  @default(0)
+  cgst         Float?  @default(0)
+  sgst         Float?  @default(0)
+  igst         Float?  @default(0)
+}
+
+model VoucherEntry {
+  id         Int     @id @default(autoincrement())
+  voucherId  Int
+  voucher    Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  ledgerName String
+  amount     Float
+  dr         Boolean
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  timestamp  DateTime @default(now())
+  action     String
+  details    String
+  xmlPayload String?
+  tenantId   Int
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
