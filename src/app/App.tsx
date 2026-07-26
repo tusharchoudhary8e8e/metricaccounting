@@ -79,6 +79,7 @@ export default function App() {
   const [selectedLedgerName, setSelectedLedgerName] = useState<string>("");
   const [selectedStockItemName, setSelectedStockItemName] = useState<string>("");
   const [voucherToEdit, setVoucherToEdit] = useState<Voucher | undefined>(undefined);
+  const [activeOverlayScreen, setActiveOverlayScreen] = useState<"party_creation" | "stock_item_creation" | null>(null);
 
   // Auth State
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -189,6 +190,7 @@ export default function App() {
   // Global Function Key (F1 - F12) shortcuts listener
   useEffect(() => {
     const handleFKeys = (e: KeyboardEvent) => {
+      if (activeOverlayScreen) return;
       if (e.key.startsWith("F") && e.key.length > 1) {
         const num = parseInt(e.key.substring(1));
         if (num >= 1 && num <= 12) {
@@ -224,7 +226,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleFKeys, true);
     return () => window.removeEventListener("keydown", handleFKeys, true);
-  }, []);
+  }, [activeOverlayScreen]);
 
   const handleMenuSelect = (sel: string) => {
     setVoucherToEdit(undefined);
@@ -298,6 +300,34 @@ export default function App() {
     await syncEngine.enqueue("party", operation, saved.id!, saved);
     await fetchAllData();
     setScreen("vouchers");
+  };
+
+  const handleSavePartyFromVoucher = async (party: Party) => {
+    let saved: Party;
+    let operation: "create" | "update" = "create";
+    if (party.id) {
+      operation = "update";
+      saved = await DB.updateParty(party);
+    } else {
+      saved = await DB.addParty(party);
+    }
+    await syncEngine.enqueue("party", operation, saved.id!, saved);
+    await fetchAllData();
+    setActiveOverlayScreen(null);
+  };
+
+  const handleSaveStockItemFromVoucher = async (item: StockItem) => {
+    let saved: StockItem;
+    let operation: "create" | "update" = "create";
+    if (item.id) {
+      operation = "update";
+      saved = await DB.updateStockItem(item);
+    } else {
+      saved = await DB.addStockItem(item);
+    }
+    await syncEngine.enqueue("stock_item", operation, saved.id!, saved);
+    await fetchAllData();
+    setActiveOverlayScreen(null);
   };
 
   const handleSaveStockItem = async (item: StockItem) => {
@@ -438,9 +468,11 @@ export default function App() {
             dayBook={dayBook}
             stockItems={stockItems}
             onEsc={() => setScreen("vouchers")}
-            onShortcutCreateParty={() => setScreen("party_creation")}
+            onShortcutCreateParty={() => setActiveOverlayScreen("party_creation")}
+            onShortcutCreateStockItem={() => setActiveOverlayScreen("stock_item_creation")}
             onSave={handleSaveVoucher}
             voucherToEdit={voucherToEdit}
+            disableKeyboard={activeOverlayScreen !== null}
           />
         ) : screen === "party_creation" ? (
           <PartyCreationScreen
@@ -523,6 +555,23 @@ export default function App() {
             onEsc={() => setScreen("gateway")}
           />
         ) : null}
+
+        {activeOverlayScreen === "party_creation" && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#6b7c8c", display: "flex", flexDirection: "column" }}>
+            <PartyCreationScreen
+              onSave={handleSavePartyFromVoucher}
+              onEsc={() => setActiveOverlayScreen(null)}
+            />
+          </div>
+        )}
+        {activeOverlayScreen === "stock_item_creation" && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#6b7c8c", display: "flex", flexDirection: "column" }}>
+            <StockItemCreationScreen
+              onSave={handleSaveStockItemFromVoucher}
+              onEsc={() => setActiveOverlayScreen(null)}
+            />
+          </div>
+        )}
       </div>
 
       <FKeyBar keys={fkeys} />

@@ -16,8 +16,10 @@ export function VoucherEntryScreen({
   stockItems,
   onEsc,
   onShortcutCreateParty,
+  onShortcutCreateStockItem,
   onSave,
   voucherToEdit,
+  disableKeyboard,
 }: {
   type: VoucherType;
   parties: Party[];
@@ -25,8 +27,10 @@ export function VoucherEntryScreen({
   stockItems: StockItem[];
   onEsc: () => void;
   onShortcutCreateParty?: () => void;
+  onShortcutCreateStockItem?: () => void;
   onSave?: (vch: Voucher) => void;
   voucherToEdit?: Voucher;
+  disableKeyboard?: boolean;
 }) {
   const isInventory = type === "Sales" || type === "Purchase";
   const isSales = type === "Sales";
@@ -268,6 +272,7 @@ export function VoucherEntryScreen({
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (disableKeyboard) return;
       if (showQuitConfirm) {
         if (e.key.toLowerCase() === "y" || e.key === "Enter") {
           e.preventDefault();
@@ -306,6 +311,13 @@ export function VoucherEntryScreen({
         if (isPartyField || isAccountField) {
           e.preventDefault();
           onShortcutCreateParty?.();
+        }
+      }
+
+      if (e.ctrlKey && (e.key === "e" || e.key === "E")) {
+        if (isInventory) {
+          e.preventDefault();
+          onShortcutCreateStockItem?.();
         }
       }
 
@@ -421,7 +433,9 @@ export function VoucherEntryScreen({
     showAccept,
     showQuitConfirm,
     onEsc,
-    onShortcutCreateParty
+    onShortcutCreateParty,
+    onShortcutCreateStockItem,
+    disableKeyboard
   ]);
 
   const rawSubtotal = itemsList.reduce((sum, it) => sum + it.amount, 0);
